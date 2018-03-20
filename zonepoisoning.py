@@ -164,7 +164,7 @@ def main():
     global VERBOSE_LEVEL
 
     parser = argparse.ArgumentParser(description="Checks if a domain is vulnerable to Zone Poisoning")
-    parser.add_argument("domain")
+    parser.add_argument("domain", nargs='+')
     parser.add_argument("-4", dest='ipver', const=A, action='store_const', required=False, help="Use IPv4")
     parser.add_argument("-6", dest='ipver', const=AAAA, action='store_const', required=False, help="Use IPv6")
     parser.add_argument("--timeout", default=5, type=int, action='store', required=False, help="DNS timeout")
@@ -178,17 +178,22 @@ def main():
     if args.verbose is not None:
         VERBOSE_LEVEL = args.verbose
 
-    sys.exit(
-        poisonable_zone(
-            args.domain,
+    vulnerable_domains = 0
+    for domain in args.domain:
+        vulnerable = poisonable_zone(
+            domain,
             args.ipver or A,
             args.server,
             args.timeout,
             args.entry,
             args.message or DEFAULT_RECORD_TEXT
         )
-    )
 
+        if vulnerable:
+            vulnerable_domains += 1
+
+    print("{} out of {} domains were vulnerable.".format(vulnerable_domains, len(args.domain)))
+    sys.exit(vulnerable_domains != 0)
 
 if __name__ == '__main__':
     main()

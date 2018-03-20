@@ -38,7 +38,7 @@ DEFAULT_RECORD_TEXT = 'Domain vulnerable to Zone Poisoning, see http://mkorczyns
 
 def nameserver_addresses(domain, rdtype=A):
     '''Returns the IP addresses of the nameservers for the given domain'''
-    nameservers = dns.resolver.query(domain, NS)
+    nameservers = dns.resolver.query(domain, NS, raise_on_no_answer=False)
 
     if VERBOSE_LEVEL >= 1:
         print("Nameservers of {}: {}".format(

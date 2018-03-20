@@ -88,7 +88,7 @@ def query_record(resolver, test_record):
     return False
 
 
-def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-poisonable", text=DEFAULT_RECORD_TEXT):
+def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-poisonable", text=DEFAULT_RECORD_TEXT, vulnerable_nameservers=None):
     '''Checks the zone for poisonability'''
     nameservers = {}
     dns.resolver.get_default_resolver().lifetime = timeout
@@ -106,11 +106,20 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
     vulnerable = False
     resolver = dns.resolver.Resolver(configure=False)
     resolver.lifetime = timeout
+
     for ns_address in nameservers:
         if VERBOSE_LEVEL >= 1:
             print("Checking zone {} on server {}{}".format(
                 zone_name, ns_address, nameservers[ns_address]
                 ))
+
+        if vulnerable_nameservers and ns_address in vulnerable_nameservers:
+            if vulnerable_nameservers[ns_address]:
+                vulnerable = True
+                print("ASSUMED VULNERABLE: Assuming zone {} on server {}{} to be vulnerable based on prior results".format(zone_name, ns_address, nameservers[ns_address]))
+            else:
+                print("ASSUMED NOT VULNERABLE: Assuming zone {} on server {}{} not to be vulnerable based on prior results".format(zone_name, ns_address, nameservers[ns_address]))
+            continue
 
         resolver.nameservers = [ns_address]
         test_record = "{}.{}".format(entry, zone_name)
@@ -149,10 +158,16 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
 
         if added or deleted:
             vulnerable = True
+            if vulnerable_nameservers is not None:
+                vulnerable_nameservers[ns_address] = True
+
             print("VULNERABLE: server {}{} accepted a dynamic update on zone {}".format(
                 ns_address, nameservers[ns_address], zone_name))
         else:
+            if vulnerable_nameservers is not None:
+                vulnerable_nameservers[ns_address] = False
             print("NOT VULNERABLE: server {}{}".format(ns_address, nameservers[ns_address]))
+
 
         if VERBOSE_LEVEL >= 1:
             print("")
@@ -169,6 +184,7 @@ def main():
     parser.add_argument("-6", dest='ipver', const=AAAA, action='store_const', required=False, help="Use IPv6")
     parser.add_argument("--timeout", default=5, type=int, action='store', required=False, help="DNS timeout")
     parser.add_argument("--server", nargs='?', action='store', required=False, help="Nameserver to be tested")
+    parser.add_argument("--quick", action='store_true', required=False, help="Scan quicker by assuming that a single nameserver will always be either vulnerable or not")
     parser.add_argument("--entry", default='zone-is-poisonable', action='store', required=False, help="Record name used on the test")
     parser.add_argument("--message", action='store', required=False, help="Message used on the test record")
     parser.add_argument("--quiet", dest='verbose', const=0, action='store_const', required=False)
@@ -179,6 +195,8 @@ def main():
         VERBOSE_LEVEL = args.verbose
 
     vulnerable_domains = 0
+    vulnerable_nameservers = {} if args.quick else None
+
     for domain in args.domain:
         vulnerable = poisonable_zone(
             domain,
@@ -186,7 +204,8 @@ def main():
             args.server,
             args.timeout,
             args.entry,
-            args.message or DEFAULT_RECORD_TEXT
+            args.message or DEFAULT_RECORD_TEXT,
+            vulnerable_nameservers
         )
 
         if vulnerable:

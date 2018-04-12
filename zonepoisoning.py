@@ -72,13 +72,25 @@ def nameserver_addresses(domain, rdtype=A):
     return
 
 
-def query_record(resolver, test_record):
+def record_in_response(response, needle):
+    '''Looks for a TXT record in a dns response'''
+    for item in response.response.answer[0].items:
+        if b''.join(item.strings) == needle:
+            return True
+    return False
+
+
+def query_record(resolver, test_record, test_value):
     '''Queries the test record and returns wether it exists'''
     try:
-        resolver.query(test_record, TXT)
-        if VERBOSE_LEVEL >= 1:
-            print("Test record is present!")
-        return True
+        response = resolver.query(test_record, TXT)
+        if record_in_response(response, test_value):
+            if VERBOSE_LEVEL >= 1:
+                print("Test record is present with the test canary!")
+            return True
+        else:
+            if VERBOSE_LEVEL >= 1:
+                print("Request of the test record returned a different string: {}".format(response.response.answer[0].items))
     except NXDOMAIN:
         if VERBOSE_LEVEL >= 2:
             print("Test record is missing")
@@ -110,6 +122,7 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
     vulnerable = False
     resolver = dns.resolver.Resolver(configure=False)
     resolver.lifetime = timeout
+    text = text.encode('utf-8')
 
     for ns_address in nameservers:
         if VERBOSE_LEVEL >= 1:
@@ -130,9 +143,9 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
 
         added = False
         deleted = False
-        missing = not query_record(resolver, test_record)
+        missing = not query_record(resolver, test_record, text)
 
-        test_data = dns.rdtypes.ANY.TXT.TXT(dns.rdataclass.IN, TXT, [text.encode('utf-8')])
+        test_data = dns.rdtypes.ANY.TXT.TXT(dns.rdataclass.IN, TXT, [text])
         if missing:
             if VERBOSE_LEVEL >= 1:
                 print("Attempting to add test record to server {}{}".format(
@@ -146,7 +159,7 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
                 dns.query.udp(update, ns_address, timeout=timeout)
             except dns.exception.DNSException as dnsexception:
                 print("Server refused the update attempt: {}".format(dnsexception))
-            added = query_record(resolver, test_record)
+            added = query_record(resolver, test_record, text)
 
         if added or not missing:
             if VERBOSE_LEVEL >= 1:
@@ -158,7 +171,7 @@ def poisonable_zone(zone_name, ipver=A, server=None, timeout=5, entry="zone-is-p
                 dns.query.udp(update, ns_address, timeout=timeout)
             except dns.exception.DNSException as dnsexception:
                 print("Server refused the deletion attempt: {}".format(dnsexception))
-            deleted = not query_record(resolver, test_record)
+            deleted = not query_record(resolver, test_record, text)
 
         if added or deleted:
             vulnerable = True

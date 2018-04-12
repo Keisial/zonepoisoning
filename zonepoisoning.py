@@ -52,15 +52,19 @@ def nameserver_addresses(domain, rdtype=A):
         return
 
     for nameserver in nameservers:
-        answers = dns.resolver.query(nameserver.target, rdtype)
+        try:
+            answers = dns.resolver.query(nameserver.target, rdtype)
+        except NXDOMAIN:
+            answers = [None]
 
         if VERBOSE_LEVEL >= 2:
             print(" - {}: {}".format(
                 nameserver.to_text().rstrip('.'),
-                ", ".join([answer.to_text() for answer in answers])))
+                ", ".join([answer.to_text() if answer else '(no such domain)' for answer in answers])))
 
         for answer in answers:
-            yield (nameserver.to_text(), answer.address)
+            if answer:
+                yield (nameserver.to_text(), answer.address)
 
     if VERBOSE_LEVEL >= 2:
         print("")
